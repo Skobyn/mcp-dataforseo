@@ -1,0 +1,515 @@
+# Complete Guide to Creating and Publishing a stdio MCP Server
+
+This document provides step-by-step instructions for creating a Model Context Protocol (MCP) server that operates over standard input/output (stdio) and publishing it as an npm package that can be easily executed with `npx` from anywhere.
+
+## Prerequisites
+
+- Node.js installed (v14 or newer recommended)
+- npm account (create one at https://www.npmjs.com/signup if needed)
+- Basic knowledge of JavaScript
+- API credentials for the service you want to wrap (if applicable)
+
+## Step 1: Set Up the Project Structure
+
+First, create a new directory for your project and initialize it:
+
+```bash
+mkdir my-mcp-server
+cd my-mcp-server
+npm init -y
+```
+
+This will create a basic `package.json` file. Now, let's modify it to specify the entry point and make it executable:
+
+```bash
+# Create the main file
+touch index.js
+chmod +x index.js
+```
+
+## Step 2: Configure package.json
+
+Edit your `package.json` file to include the following settings:
+
+```json
+{
+  "name": "@your-username/mcp-server-name",
+  "version": "1.0.0",
+  "description": "An MCP server for [your service]",
+  "main": "index.js",
+  "bin": {
+    "mcp-server-name": "./index.js"
+  },
+  "keywords": [
+    "mcp",
+    "modelcontextprotocol",
+    "stdio"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    // Add your dependencies here
+  }
+}
+```
+
+Make sure to replace `@your-username/mcp-server-name` with your npm username and desired package name. Using a scoped package name (with the `@username/` prefix) is recommended but not required.
+
+## Step 3: Install Required Dependencies
+
+Install any dependencies your MCP server needs. For a basic MCP server interfacing with an API, you might need:
+
+```bash
+npm install axios
+```
+
+If you're implementing the full MCP spec, you might want a validation library:
+
+```bash
+npm install ajv
+```
+
+## Step 4: Implement the Server Core
+
+Edit your `index.js` file to include the basic stdio MCP server implementation:
+
+```javascript
+#!/usr/bin/env node
+
+const readline = require('readline');
+const axios = require('axios');
+
+// Configure environment variables
+const API_KEY = process.env.YOUR_API_KEY;
+if (!API_KEY) {
+  console.error('Error: YOUR_API_KEY environment variable is required');
+  process.exit(1);
+}
+
+// Initialize API client
+const apiClient = axios.create({
+  baseURL: 'https://api.your-service.com/v1',
+  headers: {
+    'Authorization': `Bearer ${API_KEY}`,
+    'Content-Type': 'application/json'
+  }
+});
+
+// Set up readline interface for stdio
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+  terminal: false
+});
+
+// Process each line from stdin as a request
+rl.on('line', async (line) => {
+  try {
+    // Parse the incoming JSON request
+    const request = JSON.parse(line);
+    
+    // Process based on request type
+    let response;
+    
+    if (request.type === 'completion') {
+      // Example: Call your API for completions
+      const apiResponse = await apiClient.post('/completions', {
+        prompt: request.prompt,
+        max_tokens: request.options?.max_tokens || 100,
+        temperature: request.options?.temperature || 0.7
+      });
+      
+      response = {
+        type: 'completion',
+        completion: apiResponse.data.choices[0].text,
+        status: 'success'
+      };
+    } else if (request.type === 'embedding') {
+      // Example: Call your API for embeddings
+      const apiResponse = await apiClient.post('/embeddings', {
+        input: request.text
+      });
+      
+      response = {
+        type: 'embedding',
+        embedding: apiResponse.data.embedding,
+        status: 'success'
+      };
+    } else {
+      response = {
+        type: 'error',
+        error: 'Unsupported request type',
+        status: 'error'
+      };
+    }
+    
+    // Send response back to stdout
+    console.log(JSON.stringify(response));
+  } catch (error) {
+    // Handle errors
+    console.error(`ERROR: ${error.message}`);
+    console.log(JSON.stringify({
+      type: 'error',
+      error: error.message,
+      status: 'error'
+    }));
+  }
+});
+
+// Log startup information to stderr (won't affect the protocol)
+console.error('MCP Server started and waiting for requests...');
+```
+
+Make sure to customize this template to match your specific API's endpoints and requirements.
+
+## Step 5: Add Support for Common MCP Request Types
+
+Depending on your service, you might want to support additional MCP request types. Here's how to expand your implementation for the most common types:
+
+```javascript
+// Inside the request processing block:
+if (request.type === 'completion') {
+  // Existing completion code...
+} else if (request.type === 'embedding') {
+  // Existing embedding code...
+} else if (request.type === 'classification') {
+  const apiResponse = await apiClient.post('/classify', {
+    text: request.text,
+    categories: request.options?.categories || []
+  });
+  
+  response = {
+    type: 'classification',
+    classifications: apiResponse.data.classifications,
+    status: 'success'
+  };
+} else if (request.type === 'tokencount') {
+  const apiResponse = await apiClient.post('/tokens/count', {
+    text: request.text
+  });
+  
+  response = {
+    type: 'tokencount',
+    count: apiResponse.data.token_count,
+    status: 'success'
+  };
+} else {
+  // Unsupported request type...
+}
+```
+
+## Step 6: Implement Error Handling
+
+Add robust error handling to ensure your server gracefully handles issues:
+
+```javascript
+try {
+  // Existing code...
+} catch (error) {
+  // Enhanced error handling
+  let errorMessage = error.message;
+  let statusCode = 500;
+  
+  if (error.response) {
+    // API responded with an error
+    statusCode = error.response.status;
+    errorMessage = `API Error (${statusCode}): ${
+      error.response.data.error || error.response.statusText
+    }`;
+  } else if (error.request) {
+    // No response received
+    errorMessage = `No response from API: ${error.message}`;
+  }
+  
+  console.error(`ERROR: ${errorMessage}`);
+  console.log(JSON.stringify({
+    type: 'error',
+    error: errorMessage,
+    status: 'error',
+    code: statusCode
+  }));
+}
+```
+
+## Step 7: Test Locally
+
+Before publishing, test your server locally:
+
+```bash
+# Make sure the file is executable
+chmod +x index.js
+
+# Run the server with required environment variables
+YOUR_API_KEY=your_actual_api_key ./index.js
+```
+
+In another terminal, send a test request:
+
+```bash
+echo '{"type":"completion","prompt":"Hello, world!"}' | YOUR_API_KEY=your_actual_api_key ./index.js
+```
+
+Make sure you get a valid response before proceeding.
+
+## Step 8: Add Documentation
+
+Create a README.md file with clear instructions:
+
+```markdown
+# MCP Server for [Your Service]
+
+A stdio-based Model Context Protocol (MCP) server for [Your Service].
+
+## Installation
+
+No installation needed! Run directly with npx:
+
+```bash
+YOUR_API_KEY=your_api_key npx -y @your-username/mcp-server-name
+```
+
+## Usage
+
+Send JSON requests to stdin and receive JSON responses from stdout:
+
+```bash
+echo '{"type":"completion","prompt":"Hello, world!"}' | YOUR_API_KEY=your_api_key npx -y @your-username/mcp-server-name
+```
+
+## Environment Variables
+
+- `YOUR_API_KEY`: Your API key for [Your Service] (required)
+
+## Supported Request Types
+
+- `completion`: Generate text completions
+- `embedding`: Generate vector embeddings for text
+- `classification`: Classify text into categories
+- `tokencount`: Count tokens in text
+
+## Example
+
+```javascript
+const { spawn } = require('child_process');
+
+// Start the MCP server
+const server = spawn('npx', ['-y', '@your-username/mcp-server-name'], {
+  env: { ...process.env, YOUR_API_KEY: 'your_api_key' }
+});
+
+// Send a request
+server.stdin.write(JSON.stringify({
+  type: 'completion',
+  prompt: 'Hello, world!'
+}));
+server.stdin.end();
+
+// Process the response
+server.stdout.on('data', (data) => {
+  const response = JSON.parse(data.toString());
+  console.log(response);
+});
+```
+```
+
+## Step 9: Publish to npm
+
+Log in to npm and publish your package:
+
+```bash
+# Login to npm
+npm login
+
+# Build and publish
+npm publish --access public
+```
+
+If you're using a scoped package (`@username/package-name`), you'll need to use the `--access public` flag to make it publicly available.
+
+## Step 10: Verify the Installation
+
+After publishing, verify that your package works by installing it globally:
+
+```bash
+YOUR_API_KEY=your_api_key npx -y @your-username/mcp-server-name
+```
+
+Then in another terminal window, test sending a request:
+
+```bash
+echo '{"type":"completion","prompt":"Hello, world!"}' | YOUR_API_KEY=your_api_key npx -y @your-username/mcp-server-name
+```
+
+## Step 11: Create an n8n Integration (Optional)
+
+If you want to integrate with n8n, create a custom node:
+
+```javascript
+// n8n-nodes-mcp-server.js
+const { spawn } = require('child_process');
+
+class MCPServerNode {
+  constructor() {
+    this.name = 'MCP Server';
+    this.type = 'action';
+    this.description = 'Use your MCP server in n8n workflows';
+  }
+
+  async execute(params) {
+    const { requestType, prompt, text, options } = params;
+    
+    return new Promise((resolve, reject) => {
+      // Construct the request based on type
+      let request;
+      if (requestType === 'completion') {
+        request = { type: 'completion', prompt, options };
+      } else if (requestType === 'embedding') {
+        request = { type: 'embedding', text, options };
+      } else {
+        reject(new Error(`Unsupported request type: ${requestType}`));
+        return;
+      }
+      
+      // Start the MCP server process
+      const serverProcess = spawn('npx', ['-y', '@your-username/mcp-server-name'], {
+        env: { ...process.env, YOUR_API_KEY: process.env.YOUR_API_KEY }
+      });
+      
+      let responseData = '';
+      
+      // Listen for responses
+      serverProcess.stdout.on('data', (data) => {
+        responseData += data.toString();
+      });
+      
+      // Handle errors
+      serverProcess.stderr.on('data', (data) => {
+        console.error(`Server error: ${data}`);
+      });
+      
+      // When the process ends
+      serverProcess.on('close', (code) => {
+        if (code !== 0) {
+          reject(new Error(`Server exited with code ${code}`));
+          return;
+        }
+        
+        try {
+          const response = JSON.parse(responseData);
+          resolve(response);
+        } catch (error) {
+          reject(error);
+        }
+      });
+      
+      // Send the request
+      serverProcess.stdin.write(JSON.stringify(request) + '\n');
+      serverProcess.stdin.end();
+    });
+  }
+}
+
+module.exports = MCPServerNode;
+```
+
+## Bonus: Advanced Features
+
+Consider adding these advanced features to your MCP server:
+
+### Configuration Options
+
+Add support for configuration options via environment variables:
+
+```javascript
+const CONFIG = {
+  apiKey: process.env.YOUR_API_KEY,
+  baseUrl: process.env.YOUR_API_BASE_URL || 'https://api.default-service.com',
+  timeout: parseInt(process.env.YOUR_API_TIMEOUT || '30000', 10),
+  debug: process.env.YOUR_API_DEBUG === 'true'
+};
+```
+
+### Debug Mode
+
+Add a debug mode to help with troubleshooting:
+
+```javascript
+if (CONFIG.debug) {
+  console.error('DEBUG: Request:', JSON.stringify(request));
+}
+```
+
+### Request Validation
+
+Add schema validation for requests:
+
+```javascript
+const Ajv = require('ajv');
+const ajv = new Ajv();
+
+const completionSchema = {
+  type: 'object',
+  required: ['type', 'prompt'],
+  properties: {
+    type: { const: 'completion' },
+    prompt: { type: 'string' },
+    options: {
+      type: 'object',
+      properties: {
+        max_tokens: { type: 'number' },
+        temperature: { type: 'number' }
+      }
+    }
+  }
+};
+
+const validateCompletion = ajv.compile(completionSchema);
+
+// In your request handler:
+if (request.type === 'completion') {
+  if (!validateCompletion(request)) {
+    console.log(JSON.stringify({
+      type: 'error',
+      error: 'Invalid completion request: ' + ajv.errorsText(validateCompletion.errors),
+      status: 'error'
+    }));
+    return;
+  }
+  // Process the request...
+}
+```
+
+### Rate Limiting
+
+Add basic rate limiting:
+
+```javascript
+const rateLimit = {
+  windowMs: 60000, // 1 minute
+  max: 10, // limit each IP to 10 requests per windowMs
+  current: 0,
+  resetTime: Date.now() + 60000
+};
+
+// Before processing each request:
+if (Date.now() > rateLimit.resetTime) {
+  rateLimit.current = 0;
+  rateLimit.resetTime = Date.now() + rateLimit.windowMs;
+}
+
+if (rateLimit.current >= rateLimit.max) {
+  console.log(JSON.stringify({
+    type: 'error',
+    error: 'Rate limit exceeded. Try again later.',
+    status: 'error',
+    code: 429
+  }));
+  return;
+}
+
+rateLimit.current++;
+```
+
+## Conclusion
+
+You now have a complete stdio-based MCP server published as an npm package that can be run from anywhere using `npx`. This allows for easy integration with various tools and platforms, including your n8n self-hosted servers. The server follows the MCP protocol standard, making it compatible with any MCP client.

@@ -1,0 +1,24 @@
+{
+  "name": "@skobyn/mcp-dataforseo",
+  "version": "1.0.2",
+  "description": "Model Context Protocol server for DataForSEO API",
+  "main": "index.js",
+  "bin": {
+    "mcp-dataforseo": "./index.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "mcp",
+    "modelcontextprotocol",
+    "dataforseo",
+    "seo",
+    "api"
+  ],
+  "author": "skobyn",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.2"
+  }
+}

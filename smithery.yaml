@@ -1,0 +1,25 @@
+# Smithery configuration file: https://smithery.ai/docs/config
+startCommand:
+  type: stdio
+  configSchema:
+    # JSON Schema defining the configuration options for the MCP
+    type: object
+    required:
+      - username
+      - password
+    properties:
+      username:
+        type: string
+        description: Your DataForSEO API username
+      password:
+        type: string
+        description: Your DataForSEO API password
+  commandFunction: |
+    (config) => ({
+      command: 'node',
+      args: ['index.js'],
+      env: {
+        DATAFORSEO_USERNAME: config.username, 
+        DATAFORSEO_PASSWORD: config.password
+      }
+    }) 
